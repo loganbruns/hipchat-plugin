@@ -17,6 +17,7 @@ public class StandardHipChatService implements HipChatService {
     public static final Integer DEFAULT_TIMEOUT = 10000;
     private static final Logger logger = Logger.getLogger(StandardHipChatService.class.getName());
     private static final String[] DEFAULT_ROOMS = new String[0];
+    private static final boolean HAVE_GROUP_ADMIN_TOKEN = false;
 
     private final String server;
     private final String token;
@@ -37,28 +38,53 @@ public class StandardHipChatService implements HipChatService {
 
     public void publish(String message, String color) {
         for (String roomId : roomIds) {
-            logger.log(Level.INFO, "Posting: {0} to {1}: {2} {3}", new Object[]{sendAs, roomId, message, color});
-            HttpClient client = getHttpClient();
-            String url = "https://" + server + "/v1/rooms/message?auth_token=" + token;
-            PostMethod post = new PostMethod(url);
 
-            try {
-                post.addParameter("from", sendAs);
-                post.addParameter("room_id", roomId);
-                post.addParameter("message", message);
-                post.addParameter("color", color);
-                post.addParameter("notify", shouldNotify(color));
-                post.getParams().setContentCharset("UTF-8");
-                int responseCode = client.executeMethod(post);
-                String response = post.getResponseBodyAsString();
-                if (responseCode != HttpStatus.SC_OK || !response.contains("\"sent\"")) {
-                    logger.log(Level.WARNING, "HipChat post may have failed. Response: {0}", response);
-                }
-            } catch (Exception e) {
-                logger.log(Level.WARNING, "Error posting to HipChat", e);
-            } finally {
-                post.releaseConnection();
-            }
+	    if (HAVE_GROUP_ADMIN_TOKEN) {
+		logger.log(Level.INFO, "Posting: {0} to {1}: {2} {3}", new Object[]{sendAs, roomId, message, color});
+		HttpClient client = getHttpClient();
+		String url = "https://" + server + "/v1/rooms/message?auth_token=" + token;
+		PostMethod post = new PostMethod(url);
+
+		try {
+		    post.addParameter("from", sendAs);
+		    post.addParameter("room_id", roomId);
+		    post.addParameter("message", message);
+		    post.addParameter("color", color);
+		    post.addParameter("notify", shouldNotify(color));
+		    post.getParams().setContentCharset("UTF-8");
+		    int responseCode = client.executeMethod(post);
+		    String response = post.getResponseBodyAsString();
+		    if (responseCode != HttpStatus.SC_OK || !response.contains("\"sent\"")) {
+			logger.log(Level.WARNING, "HipChat post may have failed. Response: {0}", response);
+		    }
+		} catch (Exception e) {
+		    logger.log(Level.WARNING, "Error posting to HipChat", e);
+		} finally {
+		    post.releaseConnection();
+		}
+	    } else {
+		logger.log(Level.INFO, "Posting: {0} to {1}: {2} {3}", new Object[]{sendAs, roomId, message, color});
+
+		HttpClient client = getHttpClient();
+		String url = "https://" + server + "/v2/room/" + roomId + "/notification?auth_token=" + token;
+		PostMethod post = new PostMethod(url);
+
+		try {
+		    post.addParameter("message", message);
+		    post.addParameter("color", color);
+		    //		    post.addParameter("notify", shouldNotifyV2(color));
+		    post.getParams().setContentCharset("UTF-8");
+		    int responseCode = client.executeMethod(post);
+		    String response = post.getResponseBodyAsString();
+		    if (responseCode != HttpStatus.SC_OK || !response.contains("\"sent\"")) {
+			logger.log(Level.WARNING, "HipChat post may have failed. Response: {0}", response);
+		    }
+		} catch (Exception e) {
+		    logger.log(Level.WARNING, "Error posting to HipChat", e);
+		} finally {
+		    post.releaseConnection();
+		}
+	    }
         }
     }
 
@@ -80,6 +106,10 @@ public class StandardHipChatService implements HipChatService {
 
     private String shouldNotify(String color) {
         return color.equalsIgnoreCase("green") ? "0" : "1";
+    }
+
+    private String shouldNotifyV2(String color) {
+        return color.equalsIgnoreCase("green") ? "false" : "true";
     }
 
     public String getServer() {
